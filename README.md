@@ -1,10 +1,12 @@
 
-
+![Example Image](./images/post.png)
 ### Request-handler
 
 This is a package made for private reasons.
 
 ---
+
+
 
 ### Description
 
@@ -31,7 +33,9 @@ import handlePostRequests from "post-request-handler"
 
 // Example usage
 const app = express();
-app.use(handlePostRequests) 
+const url = "http://example.com/"
+app.use(handlePostRequests(url))
+
 
 ```
 

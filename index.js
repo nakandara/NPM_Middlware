@@ -1,8 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import fetch from "node-fetch";
-import dotenv from "dotenv";
-
-dotenv.config();
+import bcrypt from "bcrypt";
+import { promisify } from "util";
 
 const uuidToMongooseObjectId = (uuid) => {
   const hexString = uuid.replace(/-/g, "");
@@ -15,46 +14,62 @@ const uuidToMongooseObjectId = (uuid) => {
   return truncatedString;
 };
 
-const handlePostRequests = async (req, res, next) => {
-  console.log(req.method, "req.method..........");
-  if (req.method === "POST") {
-    const path = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-    console.log("path : ", path);
-    console.log("Request Body:", req.body);
+const hashAsync = promisify(bcrypt.hash);
 
-    const mongooseObjectId = uuidToMongooseObjectId(uuidv4());
+const handlePostRequests = (url) => {
+  return async (req, res, next) => {
+    if (req.method === "POST") {
+      const path = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
-    const data = {
-      companyId: mongooseObjectId,
-      eventPayload: req.body,
-      eventName: path,
-    };
+      const mongooseObjectId = uuidToMongooseObjectId(uuidv4());
 
-    console.log(data, "data");
-    const requestOptions = {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    };
+      const recursiveBcrypt = async (obj) => {
+        for (const key in obj) {
+          if (typeof obj[key] === "object" && obj[key] !== null) {
+            await recursiveBcrypt(obj[key]);
+          } else if (key === "password") {
+            await bcryptPassword(obj, key);
+          }
+        }
+      };
 
-    try {
-      const response = await fetch(
-        "http://localhost:9090/api/event/create",
-        requestOptions
-      );
-      if (!response.ok) {
-        throw new Error("Network response was not ok");
+      const bcryptPassword = async (obj, key) => {
+        const hashedPassword = await hashAsync(obj[key], 10);
+
+        obj[key] = hashedPassword;
+      };
+
+      await recursiveBcrypt(req.body);
+
+      const data = {
+        companyId: mongooseObjectId,
+        eventPayload: req.body,
+        eventName: path,
+      };
+
+      console.log(data, "data");
+      const requestOptions = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      };
+
+      try {
+        const response = await fetch(url, requestOptions);
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+        const responseData = await response.json();
+        console.log("Response:", responseData);
+      } catch (error) {
+        console.error("Example-req-handler  Error:");
       }
-      const responseData = await response.json();
-      console.log("Response:", responseData);
-    } catch (error) {
-      console.error("Error:", error.message);
     }
-  }
 
-  next();
+    next();
+  };
 };
 
 export default handlePostRequests;
